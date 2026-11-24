@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STS - See-Through Spoilage</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px 12px; background: #6A5ACD; text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+[hidden] { display: none !important; }
+
+.title { color: white; font-size: 40px; font-weight: bold; margin: 30px 0; }
+
+.box { background: #fff; padding: 50px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,1); max-width: 1200px; margin: 40px auto; text-align: left; }
+h2 { font-size: 30px; margin: 0 0 20px; }
+ol { padding-left: 25px; line-height: 1.6; }
+li { font-size: 18px; margin-bottom: 15px; color: #333; }
+
+.scan-btn { display: block; margin: 0 auto 50px auto; background: linear-gradient(135deg, #7c5cff, #4a3b99); color: #fff; padding: 16px 60px; font-size: 22px; font-family: inherit; font-weight: bold; letter-spacing: 1px; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 6px 15px rgba(0,0,0,.3); transition: all .3s ease; }
+.scan-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.4); background: linear-gradient(135deg, #8f72ff, #5b4ac2); }
+.scan-btn:active { transform: translateY(1px); }
+
+/* ---------- Scanner view ---------- */
+#scannerView .box { max-width: 520px; text-align: center; padding: 24px; margin-top: 10px; }
+#scannerView h2 { font-size: 24px; margin-bottom: 4px; }
+.sub { margin: 0 0 16px; color: #666; }
+.back { display: inline-block; text-align: left; width: 100%; margin-bottom: 8px; background: none; border: none; color: #4a3b99; font-size: 16px; cursor: pointer; padding: 0; }
+.viewer { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #222; border-radius: 16px; overflow: hidden; }
+.viewer video, .viewer img { width: 100%; height: 100%; object-fit: cover; }
+.frame { position: absolute; inset: 15%; border: 3px dashed rgba(255,255,255,.8); border-radius: 50%; pointer-events: none; }
+.buttons { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; justify-content: center; }
+.buttons button, .upload { flex: 1 1 130px; padding: 12px 14px; border: none; border-radius: 10px; background: #7a3e9d; color: #fff; font-size: 1rem; cursor: pointer; font-family: inherit; }
+.buttons button:disabled { background: #b9a6c4; cursor: not-allowed; }
+.upload { background: #555; }
+.result { background: #f7f5fb; border-radius: 16px; padding: 16px; }
+.badge { display: inline-block; padding: 6px 16px; border-radius: 999px; font-weight: 700; color: #fff; }
+.badge.fresh { background: #2e9e4f; }
+.badge.caution { background: #e09b1a; }
+.badge.rotten { background: #d33b3b; }
+.bar { height: 10px; background: #e3e0ea; border-radius: 999px; overflow: hidden; margin: 12px 0 6px; }
+.bar span { display: block; height: 100%; width: 0; background: #d33b3b; transition: width .4s; }
+.note { font-size: .8rem; color: #777; margin-top: 20px; }
+
+@media (max-width: 600px) {
+  .title { font-size: 28px; }
+  .box { padding: 24px; }
+  h2 { font-size: 22px; }
+  li { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ VIEW 1: USER MANUAL ============ -->
+<div id="manualView">
+  <div class="title">See-Through Spoilage</div>
+  <div class="box">
+    <h2>User Manual: How to Scan an Onion</h2>
+    <ol>
+      <li><b>Open the App &amp; Position the Mat:</b> Open the Smart Onion Grading app and place your phone on a stable surface facing the reference mat.</li>
+      <li><b>Place the Onion:</b> Look at your phone screen. You will see a guide box. Place the onion directly inside this box on the mat.</li>
+      <li><b>Wait for the Prompt:</b> Wait for the app's voice or text prompt confirming the onion is in the right spot and not moving.</li>
+      <li><b>Capture the Images:</b> Press the "Capture" button on the screen. The app will instantly take three pictures: a normal photo (RGB), an infrared photo (NIR), and a depth photo.</li>
+      <li><b>Wait for Processing:</b> Keep the onion still for a brief moment while the app checks the photos.</li>
+      <li><b>Retake if Prompted:</b> If the app says "Invalid Capture" (e.g., the photo is blurry, too dark, or the onion is off-center), simply adjust the onion and press Capture again.</li>
+      <li><b>Automatic Cleanup:</b> Once a good picture is taken, the app will automatically fix the lighting and remove the background. You do not need to do anything here.</li>
+      <li><b>Completion:</b> You will see a "Success" or "Processing Complete" message on the screen. You can now remove the onion and place the next one to repeat the process.</li>
+    </ol>
+  </div>
+  <button class="scan-btn" id="goScan">Scan</button>
+</div>
+
+<!-- ============ VIEW 2: ONION SCANNER ============ -->
+<div id="scannerView" hidden>
+  <div class="box">
+    <button class="back" id="backBtn">← Back to manual</button>
+    <h2>🧅 Onion Freshness Scanner</h2>
+    <p class="sub">Point the camera at an onion and tap Scan.</p>
+
+    <div class="viewer">
+      <video id="video" autoplay playsinline muted></video>
+      <img id="preview" alt="Uploaded onion" hidden>
+      <div class="frame"></div>
+    </div>
+    <canvas id="canvas" hidden></canvas>
+
+    <div class="buttons">
+      <button id="startBtn">Start camera</button>
+      <button id="scanBtn" disabled>Scan onion</button>
+      <label class="upload">Upload photo
+        <input type="file" id="fileInput" accept="image/*" hidden>
+      </label>
+    </div>
+
+    <section id="result" class="result" hidden>
+      <div id="badge" class="badge"></div>
+      <p id="message"></p>
+      <div class="bar"><span id="barFill"></span></div>
+      <small id="detail"></small>
+    </section>
+
+    <p class="note">Visual aid only. If an onion smells bad, feels soft or slimy, or shows mold, don't buy or eat it.</p>
+  </div>
+</div>
+
+<!-- Only used if you set MODEL_URL (Teachable Machine) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js"></script>
+<script>
+// Paste your Teachable Machine model URL (ending with /) to use a trained AI model.
+// Leave empty to use the built-in colour-analysis fallback.
+const MODEL_URL = "";
+
+const manualView = document.getElementById("manualView");
+const scannerView = document.getElementById("scannerView");
+const video = document.getElementById("video");
+const preview = document.getElementById("preview");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const startBtn = document.getElementById("startBtn");
+const scanBtn = document.getElementById("scanBtn");
+const fileInput = document.getElementById("fileInput");
+let model = null;
+
+// ----- Page switching -----
+document.getElementById("goScan").addEventListener("click", () => {
+  manualView.hidden = true;
+  scannerView.hidden = false;
+  window.scrollTo(0, 0);
+});
+
+document.getElementById("backBtn").addEventListener("click", () => {
+  stopCamera();
+  scannerView.hidden = true;
+  manualView.hidden = false;
+  window.scrollTo(0, 0);
+});
+
+function stopCamera() {
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+  scanBtn.disabled = true;
+  startBtn.textContent = "Start camera";
+}
+
+// ----- Camera -----
+startBtn.addEventListener("click", async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false
+    });
+    video.srcObject = stream;
+    video.hidden = false;
+    preview.hidden = true;
+    scanBtn.disabled = false;
+    startBtn.textContent = "Camera on";
+  } catch (err) {
+    alert("Could not access the camera. Allow permission, or use the Upload photo button.");
+  }
+});
+
+scanBtn.addEventListener("click", () => {
+  canvas.width = 224; canvas.height = 224;
+  const vw = video.videoWidth, vh = video.videoHeight, s = Math.min(vw, vh);
+  ctx.drawImage(video, (vw - s) / 2, (vh - s) / 2, s, s, 0, 0, 224, 224);
+  analyse();
+});
+
+fileInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  preview.onload = () => {
+    canvas.width = 224; canvas.height = 224;
+    const w = preview.naturalWidth, h = preview.naturalHeight, s = Math.min(w, h);
+    ctx.drawImage(preview, (w - s) / 2, (h - s) / 2, s, s, 0, 0, 224, 224);
+    analyse();
+  };
+  preview.src = URL.createObjectURL(file);
+  preview.hidden = false;
+  video.hidden = true;
+});
+
+// ----- Analysis -----
+async function analyse() {
+  let score, detail;
+  if (MODEL_URL) {
+    try {
+      if (!model) model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+      const preds = await model.predict(canvas);
+      const rotten = preds.find(p => /rot|bad|spoil/i.test(p.className));
+      score = rotten ? rotten.probability : 0;
+      detail = preds.map(p => `${p.className}: ${(p.probability * 100).toFixed(0)}%`).join(" | ");
+    } catch (e) {
+      alert("Model failed to load. Check MODEL_URL.");
+      return;
+    }
+  } else {
+    const r = colourAnalysis();
+    score = r.score;
+    detail = `Dark/soft-rot area: ${(r.dark * 100).toFixed(0)}% | Mold-like area: ${(r.mold * 100).toFixed(0)}% (colour analysis)`;
+  }
+  showResult(score, detail);
+}
+
+function colourAnalysis() {
+  const { data } = ctx.getImageData(56, 56, 112, 112);
+  let dark = 0, mold = 0, total = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const [h, s, v] = rgbToHsv(data[i], data[i + 1], data[i + 2]);
+    total++;
+    if (v < 0.22) dark++;
+    else if (h >= 15 && h <= 40 && s > 0.45 && v < 0.45) dark++;
+    else if (h >= 70 && h <= 200 && s > 0.2 && v < 0.6) mold++;
+  }
+  dark /= total; mold /= total;
+  return { dark, mold, score: Math.min(1, (dark + mold * 1.5) * 2.5) };
+}
+
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60; if (h < 0) h += 360;
+  }
+  return [h, max ? d / max : 0, max];
+}
+
+function showResult(score, detail) {
+  let cls, label, text;
+  if (score >= 0.6) {
+    cls = "rotten"; label = "❌ Likely ROTTEN";
+    text = "Do not buy this onion. It shows signs of rot or mold.";
+  } else if (score >= 0.3) {
+    cls = "caution"; label = "⚠️ Check carefully";
+    text = "Some suspicious spots. Press it for softness, smell it, and inspect before buying.";
+  } else {
+    cls = "fresh"; label = "✅ Looks FRESH";
+    text = "No major signs of rot detected. Still confirm it is firm and has no odor.";
+  }
+  const badge = document.getElementById("badge");
+  badge.className = "badge " + cls;
+  badge.textContent = label;
+  document.getElementById("message").textContent = text;
+  document.getElementById("barFill").style.width = Math.round(score * 100) + "%";
+  document.getElementById("detail").textContent = detail;
+  const result = document.getElementById("result");
+  result.hidden = false;
+  result.scrollIntoView({ behavior: "smooth" });
+}
+</script>
+</body>
+</html>
